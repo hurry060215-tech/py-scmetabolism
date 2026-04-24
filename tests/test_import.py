@@ -1,45 +1,67 @@
-#!/usr/bin/env python
-"""Quick sanity test of py-scmetabolism package."""
-import warnings
-warnings.filterwarnings("ignore")
 import numpy as np
-import pandas as pd
-import anndata as ad
-from py_scmetabolism import sc_metabolism_anndata
+from py_scmetabolism import sc_metabolism, sc_metabolism_anndata
 
-print("Testing py-scmetabolism import and basic functionality...")
 
-# Create tiny dataset
-n_cells, n_genes = 10, 50
-counts = np.random.poisson(5.0, (n_cells, n_genes))
-adata = ad.AnnData(
-    counts,
-    obs=pd.DataFrame(index=[f"Cell{i}" for i in range(n_cells)]),
-    var=pd.DataFrame(index=[f"Gene{i}" for i in range(n_genes)])
-)
+def test_import_sc_metabolism():
+    assert callable(sc_metabolism)
 
-# Test VISION method
-adata_vision = sc_metabolism_anndata(
-    adata.copy(),
-    method="VISION",
-    imputation=False,
-    ncores=1,
-    metabolism_type="KEGG",
-    key_added="metabolism_vision"
-)
 
-print(f"  VISION scores shape: {adata_vision.obsm['X_metabolism_vision'].shape}")
-print(f"  Number of pathways: {len(adata_vision.uns['metabolism_vision_pathways'])}")
-print("  Test passed!")
+def test_import_sc_metabolism_anndata():
+    assert callable(sc_metabolism_anndata)
 
-# Test AUCell method
-adata_aucell = sc_metabolism_anndata(
-    adata.copy(),
-    method="AUCell",
-    imputation=False,
-    ncores=1,
-    metabolism_type="KEGG",
-    key_added="metabolism_aucell"
-)
-print(f"  AUCell scores shape: {adata_aucell.obsm['X_metabolism_aucell'].shape}")
-print("  All tests completed successfully.")
+
+def test_import_methods():
+    from py_scmetabolism.methods import aucell_score, gsva_score, ssgsea_score, vision_score
+
+    assert callable(aucell_score)
+    assert callable(ssgsea_score)
+    assert callable(gsva_score)
+    assert callable(vision_score)
+
+
+def test_import_visualize():
+    from py_scmetabolism import boxplot_metabolism, dimplot_metabolism, dotplot_metabolism
+
+    assert callable(dimplot_metabolism)
+    assert callable(dotplot_metabolism)
+    assert callable(boxplot_metabolism)
+
+
+def test_load_kegg_gmt():
+    from py_scmetabolism.compute import load_metabolism_gmt
+
+    pathways = load_metabolism_gmt("KEGG")
+    assert isinstance(pathways, dict)
+    assert len(pathways) > 0
+    for name, genes in pathways.items():
+        assert isinstance(name, str)
+        assert isinstance(genes, list)
+        assert len(genes) > 0
+
+
+def test_vision_via_anndata(kegg_adata):
+    result = sc_metabolism_anndata(
+        kegg_adata.copy(),
+        method="VISION",
+        imputation=False,
+        ncores=1,
+        metabolism_type="KEGG",
+    )
+    assert "X_metabolism" in result.obsm
+    assert "metabolism_pathways" in result.uns
+    assert result.obsm["X_metabolism"].shape[0] == kegg_adata.n_obs
+    assert len(result.uns["metabolism_pathways"]) > 0
+    assert np.all(np.isfinite(result.obsm["X_metabolism"]))
+
+
+def test_aucell_via_anndata(kegg_adata):
+    result = sc_metabolism_anndata(
+        kegg_adata.copy(),
+        method="AUCell",
+        imputation=False,
+        ncores=1,
+        metabolism_type="KEGG",
+    )
+    assert "X_metabolism" in result.obsm
+    assert result.obsm["X_metabolism"].shape[0] == kegg_adata.n_obs
+    assert np.all(np.isfinite(result.obsm["X_metabolism"]))

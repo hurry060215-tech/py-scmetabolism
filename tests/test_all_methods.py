@@ -1,91 +1,170 @@
-"""Comprehensive test: compare Python implementations vs R results."""
 import numpy as np
 import pandas as pd
-from scipy import stats
-import sys
-sys.path.insert(0, '..')
+import pytest
+from py_scmetabolism.methods import aucell_score, gsva_score, ssgsea_score, vision_score
+from py_scmetabolism import sc_metabolism, sc_metabolism_anndata
 
-from py_scmetabolism.methods import aucell_score, ssgsea_score, gsva_score, vision_score
 
-test_dir = "tests/test_data_real_genes"
-counts = pd.read_csv(f"{test_dir}/test_counts_real.csv", index_col=0)
-expr = counts.values.T  # genes x cells
-gene_names = list(counts.columns)
-n_genes, n_cells = expr.shape
-print(f"Expression: {n_genes} genes x {n_cells} cells")
+class TestVISION:
+    def test_output_shape(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = vision_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == len(kegg_pathways)
+        assert result.shape[1] == kegg_expr.shape[1]
 
-def load_gmt(gmt_file):
-    pathways = {}
-    with open(gmt_file, 'r') as f:
-        for line in f:
-            parts = line.strip().split('\t')
-            if len(parts) >= 3:
-                pathways[parts[0]] = parts[2:]
-    return pathways
+    def test_scores_finite(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = vision_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert np.all(np.isfinite(result.values))
 
-pathways = load_gmt("py_scmetabolism/data/KEGG_metabolism_nc.gmt")
+    def test_pathway_names(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = vision_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert list(result.index) == list(kegg_pathways.keys())
 
-def compare(py_scores, r_scores_df, method_name):
-    common = [p for p in r_scores_df.index if p in py_scores.index]
-    if not common:
-        print(f"  {method_name}: No common pathways!")
-        return
+    def test_nonzero_variance(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = vision_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        row_vars = result.var(axis=1)
+        assert (row_vars > 0).sum() > 0
 
-    per_pathway_cors = []
-    worst_pathway = None
-    worst_corr = 1.0
-    for p_name in common:
-        r_vals = r_scores_df.loc[p_name].values.astype(float)
-        py_vals = py_scores.loc[p_name].values.astype(float)
-        if np.std(r_vals) > 1e-10 and np.std(py_vals) > 1e-10:
-            c = np.corrcoef(r_vals, py_vals)[0, 1]
-            per_pathway_cors.append(c)
-            if c < worst_corr:
-                worst_corr = c
-                worst_pathway = p_name
-        elif np.std(r_vals) < 1e-10 and np.std(py_vals) < 1e-10:
-            per_pathway_cors.append(1.0)
 
-    if per_pathway_cors:
-        cors = np.array(per_pathway_cors)
-        print(f"  {method_name}:")
-        print(f"    Per-pathway corr: mean={np.mean(cors):.6f}, min={np.min(cors):.6f}, "
-              f"median={np.median(cors):.6f}")
-        print(f"    Pathways >=0.99: {np.sum(cors >= 0.99)}/{len(cors)}")
-        print(f"    Pathways >=0.95: {np.sum(cors >= 0.95)}/{len(cors)}")
-        if worst_pathway:
-            print(f"    Worst: {worst_pathway} ({worst_corr:.6f})")
+class TestAUCell:
+    def test_output_shape(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = aucell_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == len(kegg_pathways)
+        assert result.shape[1] == kegg_expr.shape[1]
 
-        # Overall correlation
-        all_r = np.concatenate([r_scores_df.loc[p].values.astype(float) for p in common])
-        all_py = np.concatenate([py_scores.loc[p].values.astype(float) for p in common])
-        valid = np.isfinite(all_r) & np.isfinite(all_py) & (np.abs(all_r) > 1e-15)
-        if np.sum(valid) > 2:
-            overall = np.corrcoef(all_r[valid], all_py[valid])[0, 1]
-            print(f"    Overall corr: {overall:.6f}")
+    def test_scores_range(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = aucell_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert np.all(result.values >= -1e-10)
+        assert np.all(result.values <= 1.0 + 1e-10)
 
-# AUCell
-print("\n=== AUCell ===")
-r_aucell = pd.read_csv(f"{test_dir}/R_results/R_AUCell_scores.csv", index_col=0)
-py_aucell = aucell_score(expr, pathways, gene_names)
-compare(py_aucell, r_aucell, "AUCell")
+    def test_scores_finite(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = aucell_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert np.all(np.isfinite(result.values))
 
-# ssGSEA (no normalization)
-print("\n=== ssGSEA (no normalization) ===")
-r_ssgsea = pd.read_csv(f"{test_dir}/R_results/R_ssGSEA_nonorm_scores.csv", index_col=0)
-py_ssgsea = ssgsea_score(expr, pathways, gene_names)
-compare(py_ssgsea, r_ssgsea, "ssGSEA")
+    def test_pathway_names(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = aucell_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert list(result.index) == list(kegg_pathways.keys())
 
-# ssGSEA (normalized)
-print("\n=== ssGSEA (normalized) ===")
-r_ssgsea_norm = pd.read_csv(f"{test_dir}/R_results/R_ssGSEA_norm_scores.csv", index_col=0)
-py_ssgsea_norm = ssgsea_score(expr, pathways, gene_names, normalize=True)
-compare(py_ssgsea_norm, r_ssgsea_norm, "ssGSEA (norm)")
 
-# GSVA
-print("\n=== GSVA ===")
-r_gsva = pd.read_csv(f"{test_dir}/R_results/R_GSVA_scores.csv", index_col=0)
-py_gsva = gsva_score(expr, pathways, gene_names)
-compare(py_gsva, r_gsva, "GSVA")
+class TestSSGSEA:
+    def test_output_shape(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = ssgsea_score(kegg_expr, kegg_pathways, kegg_gene_names, normalize=True)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == len(kegg_pathways)
+        assert result.shape[1] == kegg_expr.shape[1]
 
-print("\nDone!")
+    def test_scores_finite_normalized(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = ssgsea_score(kegg_expr, kegg_pathways, kegg_gene_names, normalize=True)
+        assert np.all(np.isfinite(result.values))
+
+    def test_scores_finite_raw(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = ssgsea_score(kegg_expr, kegg_pathways, kegg_gene_names, normalize=False)
+        assert np.all(np.isfinite(result.values))
+
+    def test_normalize_reduces_range(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result_norm = ssgsea_score(kegg_expr, kegg_pathways, kegg_gene_names, normalize=True)
+        result_raw = ssgsea_score(kegg_expr, kegg_pathways, kegg_gene_names, normalize=False)
+        assert result_norm.shape == result_raw.shape
+        norm_range = result_norm.values.max() - result_norm.values.min()
+        raw_range = result_raw.values.max() - result_raw.values.min()
+        if raw_range > 0:
+            assert norm_range <= raw_range + 1e-10
+
+
+class TestGSVA:
+    def test_output_shape(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = gsva_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == len(kegg_pathways)
+        assert result.shape[1] == kegg_expr.shape[1]
+
+    def test_scores_finite(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = gsva_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert np.all(np.isfinite(result.values))
+
+    def test_pathway_names(self, kegg_expr, kegg_pathways, kegg_gene_names):
+        result = gsva_score(kegg_expr, kegg_pathways, kegg_gene_names)
+        assert list(result.index) == list(kegg_pathways.keys())
+
+
+class TestScMetabolism:
+    def test_dataframe_input(self, kegg_adata):
+        count_df = pd.DataFrame(
+            kegg_adata.X,
+            index=kegg_adata.obs_names,
+            columns=kegg_adata.var_names,
+        )
+        result = sc_metabolism(count_df, method="VISION", metabolism_type="KEGG")
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[1] == kegg_adata.n_obs
+
+    def test_anndata_input(self, kegg_adata):
+        result = sc_metabolism(kegg_adata, method="VISION", metabolism_type="KEGG")
+        assert isinstance(result, pd.DataFrame)
+
+    @pytest.mark.filterwarnings("ignore::UserWarning")
+    def test_ndarray_input(self, kegg_adata):
+        result = sc_metabolism(kegg_adata.X, method="VISION", metabolism_type="KEGG")
+        assert isinstance(result, pd.DataFrame)
+
+    def test_invalid_method(self, kegg_adata):
+        with pytest.raises(ValueError, match="Unknown method"):
+            sc_metabolism(kegg_adata, method="INVALID")
+
+    def test_invalid_metabolism_type(self, kegg_adata):
+        with pytest.raises(ValueError):
+            sc_metabolism(kegg_adata, method="VISION", metabolism_type="INVALID")
+
+
+class TestScMetabolismAnnData:
+    def test_key_added(self, kegg_adata):
+        result = sc_metabolism_anndata(
+            kegg_adata.copy(),
+            method="VISION",
+            metabolism_type="KEGG",
+            key_added="metabolism_test",
+        )
+        assert "X_metabolism_test" in result.obsm
+        assert "metabolism_test_pathways" in result.uns
+
+    def test_vision(self, kegg_adata):
+        result = sc_metabolism_anndata(
+            kegg_adata.copy(),
+            method="VISION",
+            metabolism_type="KEGG",
+        )
+        assert "X_metabolism" in result.obsm
+        assert "metabolism_pathways" in result.uns
+        assert result.obsm["X_metabolism"].shape[0] == kegg_adata.n_obs
+        assert np.all(np.isfinite(result.obsm["X_metabolism"]))
+
+    def test_aucell(self, kegg_adata):
+        result = sc_metabolism_anndata(
+            kegg_adata.copy(),
+            method="AUCell",
+            metabolism_type="KEGG",
+        )
+        assert "X_metabolism" in result.obsm
+        assert result.obsm["X_metabolism"].shape[0] == kegg_adata.n_obs
+        assert np.all(np.isfinite(result.obsm["X_metabolism"]))
+
+    def test_ssgsea(self, kegg_adata):
+        result = sc_metabolism_anndata(
+            kegg_adata.copy(),
+            method="ssGSEA",
+            metabolism_type="KEGG",
+        )
+        assert "X_metabolism" in result.obsm
+        assert result.obsm["X_metabolism"].shape[0] == kegg_adata.n_obs
+        assert np.all(np.isfinite(result.obsm["X_metabolism"]))
+
+    def test_gsva(self, kegg_adata):
+        result = sc_metabolism_anndata(
+            kegg_adata.copy(),
+            method="GSVA",
+            metabolism_type="KEGG",
+        )
+        assert "X_metabolism" in result.obsm
+        assert result.obsm["X_metabolism"].shape[0] == kegg_adata.n_obs
+        assert np.all(np.isfinite(result.obsm["X_metabolism"]))
