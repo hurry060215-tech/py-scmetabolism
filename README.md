@@ -4,11 +4,6 @@
 
 <div align="center">
 
-# py-scMetabolism
-
-</div>
-
-<div align="center">
 
 | | |
 |---:|:---|
