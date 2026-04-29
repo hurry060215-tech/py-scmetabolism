@@ -1,4 +1,24 @@
-# py-scmetabolism
+<p align="center">
+  <img src="data/logo.png" width="360px" alt="py-scmetabolism logo">
+</p>
+
+<div align="center">
+
+# py-scMetabolism
+
+</div>
+
+<div align="center">
+
+| | |
+|---:|:---|
+| **CI/CD** | [![Build Status](https://github.com/omicverse/py-scmetabolism/actions/workflows/main.yml/badge.svg)](https://github.com/omicverse/py-scmetabolism/actions) ![Python Versions](https://img.shields.io/pypi/pyversions/py-scmetabolism) |
+| **Package** | [![PyPI](https://img.shields.io/pypi/v/py-scmetabolism?color=blue)](https://pypi.org/project/py-scmetabolism/) [![Downloads](https://static.pepy.tech/badge/py-scmetabolism)](https://pepy.tech/project/py-scmetabolism) |
+| **Meta** | [![scverse ecosystem](https://img.shields.io/badge/scverse-ecosystem-orange)](https://scverse.org/packages/#ecosystem) [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE) [![Stars](https://img.shields.io/github/stars/omicverse/py-scmetabolism?style=social)](https://github.com/omicverse/py-scmetabolism) |
+
+</div>
+
+---
 
 A **pure-Python re-implementation of scMetabolism** (Wu et al., *Cancer Discovery* 2021) for quantifying metabolic pathway activity at single-cell resolution.
 
